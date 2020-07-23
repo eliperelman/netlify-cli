@@ -6,6 +6,7 @@ const fs = require('fs')
 const { flags } = require('@oclif/command')
 const child_process = require('child_process')
 const http = require('http')
+const https = require('https')
 const httpProxy = require('http-proxy')
 const waitPort = require('wait-port')
 const stripAnsiCc = require('strip-ansi-control-characters')
@@ -188,7 +189,7 @@ async function startProxy(settings = {}, addonUrls, configPath, projectDir, func
     projectDir,
   })
 
-  const server = http.createServer(async function(req, res) {
+  const serverHandler = async function(req, res) {
     req.originalBody = ['GET', 'OPTIONS', 'HEAD'].includes(req.method) ? null : await createStreamPromise(req, 30)
 
     if (isFunction(settings.functionsPort, req.url)) {
@@ -224,14 +225,24 @@ async function startProxy(settings = {}, addonUrls, configPath, projectDir, func
 
       proxy.web(req, res, options)
     })
-  })
+  }
+
+  const server = settings.https
+    ? https.createServer({
+      key: fs.readFileSync(path.join(projectDir, settings.key)),
+      cert: fs.readFileSync(path.join(projectDir, settings.cert)),
+    }, serverHandler)
+    : http.createServer(serverHandler)
 
   server.on('upgrade', function(req, socket, head) {
     proxy.ws(req, socket, head)
   })
 
   server.listen(settings.port)
-  return { url: `http://localhost:${settings.port}`, port: settings.port }
+  return {
+    url: `${settings.https ? 'https' : 'http'}://localhost:${settings.port}`,
+    port: settings.port,
+  }
 }
 
 async function serveRedirect(req, res, proxy, match, options) {
@@ -628,6 +639,16 @@ DevCommand.flags = {
   live: flags.boolean({
     char: 'l',
     description: 'Start a public live session',
+  }),
+  https: flags.boolean({
+    char: 's',
+    description: 'Start the Netlify proxy with SSL',
+  }),
+  key: flags.string({
+    description: 'Secure the connection with an SSL keyfile',
+  }),
+  cert: flags.string({
+    description: 'Secure the connection with an SSL certificate',
   }),
 }
 

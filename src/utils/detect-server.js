@@ -147,7 +147,24 @@ module.exports.serverSettings = async (devConfig, flags, projectDir, log) => {
       'The "port" option you specified conflicts with the port of your application. Please use a different value for "port"'
     )
   }
-  const port = await getPort({ port: settings.port || 8888 })
+
+  settings.https = devConfig.https || settings.https
+  settings.key = devConfig.key || settings.key
+  settings.cert = devConfig.cert || settings.cert
+
+  if (settings.https && !(settings.key && settings.cert)) {
+    if (!settings.key) {
+      throw new Error(
+        'No "key" specified or detected. The "key" option is required to use "https" option.'
+      )
+    } else if (!settings.cert) {
+      throw new Error(
+        'No "cert" specified or detected. The "cert" option is required to use "https" option.'
+      )
+    }
+  }
+
+  const port = await getPort({ port: settings.port || settings.https ? 443 : 8888 })
   if (port !== settings.port && devConfig.port) {
     throw new Error(`Could not acquire required "port": ${settings.port}`)
   }
